@@ -661,7 +661,7 @@
 
       <aside class="side-column">
         <section class="panel side-panel">
-          <h2>📊 Sua aventura</h2>
+          <h2>Sua aventura</h2>
           <div class="stats">
             <div class="stat">
               <span class="stat-label">Pontos</span>
@@ -687,10 +687,10 @@
         </section>
 
         <section class="panel side-panel">
-          <h2>🏆 Ranking online</h2>
+          <h2>🏆 Ranking</h2>
           <ol class="ranking-list" id="rankingList"></ol>
           <div class="ranking-footer">
-            <span class="small-note" id="rankingStatus">Conectando ao Firebase...</span>
+            <span class="small-note" id="rankingStatus">Conectando...</span>
           </div>
         </section>
 
@@ -1459,7 +1459,7 @@
     async function toggleSound() {
       soundEnabled = !soundEnabled;
       soundButton.setAttribute("aria-pressed", String(soundEnabled));
-      soundButton.textContent = soundEnabled ? "🔊 Som ligado" : "🔇 Som desligado";
+      soundButton.textContent = soundEnabled ? "🔊" : "🔇";
 
       if (!soundEnabled) {
         ambientNodes.forEach(node => {
