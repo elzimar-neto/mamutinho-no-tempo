@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mamutinho no Tempo — Labirinto Pré-Cambriano</title>
+
+  <!-- Firebase compatível com o código abaixo -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <style>
+    :root {
+      --ink: #20302c;
+      --muted: #687b71;
+      --cream: #fff9e9;
+      --paper: #fffdf6;
+      --green: #398b50;
+      --green-dark: #25663b;
+      --wall: #285744;
+      --floor: #e8efd9;
+      --line: #dce5d5;
+      --shadow: 0 12px 35px rgba(41, 68, 48, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 10% 0%, #f4f5ce 0, transparent 25rem),
+        linear-gradient(145deg, #edf5df, #fff8e9 70%);
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+
+    .page {
+      max-width: 1180px;
+      padding: 24px 18px 22px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 56px;
+      height: 56px;
+      place-items: center;
+      overflow: hidden;
+      border-radius: 18px;
+      background: #d9edb6;
+      box-shadow: inset 0 0 0 2px #c2df94;
+    }
+
+    .brand-mark img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    h1, h2, p { margin-top: 0; }
+
+    h1 {
+      margin-bottom: 3px;
+      font-size: clamp(1.45rem, 4vw, 2rem);
+      line-height: 1.1;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: .95rem;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 9px;
+    }
+
+    .icon-button, .secondary-button {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--ink);
+      background: var(--paper);
+      padding: 10px 13px;
+      font-weight: 700;
+      transition: transform .15s, background .15s;
+    }
+
+    .icon-button:hover, .secondary-button:hover {
+      transform: translateY(-1px);
+      background: #f4f8ec;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(270px, .8fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(207, 220, 197, .85);
+      border-radius: 22px;
+      background: rgba(255, 253, 246, .94);
+      box-shadow: var(--shadow);
+    }
+
+    .game-panel { padding: 18px; }
+
+    .board-heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 13px;
+    }
+
+    .board-heading h2 {
+      margin: 0;
+      font-size: 1.05rem;
+    }
+
+    .status-pills {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 7px;
+    }
+
+    .pill {
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f6f8ee;
+      color: #526658;
+      font-size: .82rem;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .maze-wrap {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #d3dfca;
+      border-radius: 17px;
+      background: #dce8d1;
+    }
+
+    #maze {
+      display: grid;
+      width: 100%;
+      aspect-ratio: 17 / 13;
+      overflow: hidden;
+      border-radius: 10px;
+      grid-template-columns: repeat(17, 1fr);
+      grid-template-rows: repeat(13, 1fr);
+      background: var(--floor);
+      touch-action: none;
+    }
+
+    .cell {
+      display: grid;
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      place-items: center;
+      background: var(--floor);
+    }
+
+    .cell.wall {
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.08) 25%, transparent 25%) 0 0 / 8px 8px,
+        var(--wall);
+      box-shadow: inset 0 0 0 1px rgba(20, 54, 39, .11);
+    }
+
+    .cell.exit::after {
+      content: "🚪";
+      position: absolute;
+      font-size: clamp(11px, 2.3vw, 22px);
+    }
+
+    .cell.artifact::after {
+      content: "🪨";
+      display: grid;
+      width: 72%;
+      height: 72%;
+      place-items: center;
+      border: 2px solid #e6aa53;
+      border-radius: 50%;
+      background: #ffe3a6;
+      font-size: clamp(9px, 1.8vw, 16px);
+      box-shadow: 0 2px 4px #8e704744;
+    }
+
+    .mammoth {
+      z-index: 2;
+      width: 96%;
+      height: 96%;
+      max-width: 56px;
+      max-height: 56px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 2px rgba(35, 74, 41, .3));
+      animation: bob .65s ease-in-out infinite alternate;
+    }
+
+    @keyframes bob {
+      to { transform: translateY(-2px) rotate(-2deg); }
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+      padding: 12px 2px 0;
+      color: var(--muted);
+      font-size: .83rem;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .below-board {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 15px;
+      margin-top: 13px;
+    }
+
+    .hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: .87rem;
+      line-height: 1.45;
+    }
+
+    .dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 42px);
+      grid-template-rows: repeat(2, 39px);
+      gap: 4px;
+    }
+
+    .dpad button {
+      border: 1px solid #c8d8bd;
+      border-radius: 11px;
+      background: #f2f7e8;
+      color: #355c40;
+      font-size: 1.15rem;
+      font-weight: 900;
+      touch-action: manipulation;
+    }
+
+    .dpad button:active {
+      background: #dcedc9;
+      transform: scale(.96);
+    }
+
+    .dpad .up { grid-column: 2; grid-row: 1; }
+    .dpad .left { grid-column: 1; grid-row: 2; }
+    .dpad .down { grid-column: 2; grid-row: 2; }
+    .dpad .right { grid-column: 3; grid-row: 2; }
+
+    .side-column { display: grid; gap: 18px; }
+    .side-panel { padding: 18px; }
+
+    .side-panel h2 {
+      margin-bottom: 12px;
+      font-size: 1.05rem;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+    }
+
+    .stat {
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #f8faef;
+    }
+
+    .stat-label {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--muted);
+      font-size: .76rem;
+    }
+
+    .stat-value { font-size: 1.18rem; font-weight: 850; }
+
+    .progress-track {
+      height: 10px;
+      margin: 14px 0 7px;
+      overflow: hidden;
+      border-radius: 99px;
+      background: #e6eddd;
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #92c956, #4a9b58);
+      transition: width .25s ease;
+    }
+
+    .small-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.45;
+    }
+
+    .ranking-list {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .ranking-item {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfcf5;
+      font-size: .88rem;
+    }
+
+    .rank-number { color: #718274; font-weight: 850; }
+
+    .rank-details {
+      min-width: 0;
+    }
+
+    .rank-name {
+      display: block;
+      overflow: hidden;
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .rank-meta {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: .74rem;
+    }
+
+    .rank-score { color: var(--green-dark); font-weight: 850; }
+
+    .empty-ranking {
+      padding: 14px;
+      border: 1px dashed #cdd9c5;
+      border-radius: 12px;
+      color: var(--muted);
+      text-align: center;
+      font-size: .88rem;
+    }
+
+    .ranking-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: 11px;
+    }
+
+    .how-to {
+      margin: 0;
+      padding-left: 20px;
+      color: #526658;
+      font-size: .88rem;
+      line-height: 1.65;
+    }
+
+    .screen-overlay {
+      position: absolute;
+      z-index: 5;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      border-radius: 22px;
+      background: rgba(27, 48, 35, .58);
+      backdrop-filter: blur(4px);
+    }
+
+    .screen-overlay[hidden], .quiz-modal[hidden] { display: none; }
+
+    .overlay-card {
+      width: min(100%, 430px);
+      padding: 25px;
+      border: 1px solid #e4eadb;
+      border-radius: 21px;
+      background: var(--paper);
+      box-shadow: 0 18px 45px #17291d44;
+      text-align: center;
+    }
+
+    .overlay-mammoth {
+      display: block;
+      width: 88px;
+      height: 88px;
+      margin: 0 auto 8px;
+      object-fit: contain;
+    }
+
+    .overlay-card h2 { margin-bottom: 8px; font-size: 1.5rem; }
+
+    .overlay-card p {
+      margin-bottom: 16px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .name-input {
+      width: 100%;
+      margin: 0 0 12px;
+      padding: 12px 13px;
+      border: 1px solid #cbd9c1;
+      border-radius: 12px;
+      outline: none;
+      background: #fff;
+    }
+
+    .name-input:focus {
+      border-color: #72a65e;
+      box-shadow: 0 0 0 3px #72a65e22;
+    }
+
+    .primary-button {
+      width: 100%;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 16px;
+      background: var(--green);
+      color: white;
+      font-weight: 850;
+      box-shadow: 0 4px 0 var(--green-dark);
+      transition: transform .12s, filter .12s;
+    }
+
+    .primary-button:hover { filter: brightness(1.06); transform: translateY(-1px); }
+
+    .quiz-modal {
+      position: fixed;
+      z-index: 20;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: rgba(24, 42, 31, .62);
+      backdrop-filter: blur(4px);
+    }
+
+    .quiz-card {
+      width: min(100%, 520px);
+      padding: 23px;
+      border: 1px solid #e4eadb;
+      border-radius: 21px;
+      background: var(--paper);
+      box-shadow: 0 18px 45px #17291d55;
+    }
+
+    .quiz-kicker {
+      margin-bottom: 8px;
+      color: #658650;
+      font-size: .82rem;
+      font-weight: 850;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .quiz-card h2 {
+      margin-bottom: 17px;
+      font-size: 1.25rem;
+      line-height: 1.4;
+    }
+
+    .answers { display: grid; gap: 9px; }
+
+    .answer-button {
+      width: 100%;
+      border: 1px solid #d8e2d0;
+      border-radius: 12px;
+      padding: 11px 13px;
+      background: #f8faef;
+      color: var(--ink);
+      text-align: left;
+    }
+
+    .answer-button:hover:not(:disabled) {
+      border-color: #9fbd83;
+      background: #eef6e4;
+    }
+
+    .answer-button:disabled { cursor: default; opacity: .8; }
+    .answer-button.correct { border-color: #72b273; background: #e2f4dc; }
+    .answer-button.wrong { border-color: #d78b76; background: #fff0e9; }
+
+    .feedback {
+      min-height: 24px;
+      margin: 12px 0;
+      font-weight: 750;
+      line-height: 1.4;
+    }
+
+    .feedback.good { color: #347944; }
+    .feedback.bad { color: #a14d3e; }
+
+    .quiz-actions { display: flex; justify-content: flex-end; }
+    .quiz-actions .primary-button { width: auto; min-width: 145px; }
+
+    footer {
+      padding: 20px 8px 4px;
+      color: #65786a;
+      font-size: .85rem;
+      text-align: center;
+    }
+
+    @media (max-width: 780px) {
+      .layout { grid-template-columns: 1fr; }
+      .side-column { grid-template-columns: 1fr 1fr; }
+      .side-column .how-panel { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 520px) {
+      .page { padding: 15px 10px 20px; }
+      header { align-items: flex-start; }
+      .brand-mark { width: 46px; height: 46px; border-radius: 15px; }
+      .subtitle { font-size: .82rem; }
+      .top-actions { flex-direction: column; }
+      .icon-button { padding: 8px 10px; font-size: .82rem; }
+      .game-panel { padding: 12px; }
+      .board-heading { align-items: flex-start; flex-direction: column; }
+      .status-pills { justify-content: flex-start; }
+      .dpad { grid-template-columns: repeat(3, 36px); grid-template-rows: repeat(2, 35px); }
+      .side-column { grid-template-columns: 1fr; }
+      .side-column .how-panel { grid-column: auto; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <header>
+      <div class="brand">
+        <div class="brand-mark">
+          <img src="maamute.png" alt="Mamutinho verde">
+        </div>
+        <div>
+          <h1>Mamutinho no Tempo</h1>
+          <p class="subtitle">Uma aventura pelo labirinto do Pré-Cambriano</p>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button class="icon-button" id="soundButton" type="button" aria-pressed="false">
+          🔇 Som desligado
+        </button>
+        <button class="icon-button" id="newGameButton" type="button">
+          ↻ Novo jogo
+        </button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel game-panel" aria-label="Área do jogo">
+        <div class="board-heading">
+          <h2>Encontre as pistas e chegue à saída!</h2>
+          <div class="status-pills">
+            <span class="pill">🌋 Fase <span id="phase">1</span></span>
+            <span class="pill">🧠 <span id="questionStatus">0/3 perguntas</span></span>
+            <span class="pill">⏱️ <span id="timer">00:00</span></span>
+          </div>
+        </div>
+
+        <div class="maze-wrap">
+          <div id="maze" role="img" aria-label="Labirinto do jogo"></div>
+        </div>
+
+        <div class="legend">
+          <span>🦣 Mamutinho</span>
+          <span>🪨 Pergunta</span>
+          <span>🚪 Saída</span>
+        </div>
+
+        <div class="below-board">
+          <p class="hint">
+            Use as <strong>setas</strong> ou <strong>WASD</strong>.
+            No celular, use os controles direcionais.
+          </p>
+          <div class="dpad" aria-label="Controles direcionais">
+            <button class="up" data-move="up" aria-label="Mover para cima">↑</button>
+            <button class="left" data-move="left" aria-label="Mover para a esquerda">←</button>
+            <button class="down" data-move="down" aria-label="Mover para baixo">↓</button>
+            <button class="right" data-move="right" aria-label="Mover para a direita">→</button>
+          </div>
+        </div>
+
+        <div class="screen-overlay" id="gameOverlay">
+          <div class="overlay-card" id="overlayCard">
+            <img class="overlay-mammoth" src="maamute.png" alt="Mamutinho verde">
+            <h2>Pronto para explorar?</h2>
+            <p>
+              Explore labirintos diferentes, responda às perguntas e avance
+              pelas fases do Pré-Cambriano.
+            </p>
+            <label for="playerName" class="small-note">Seu nome para o ranking</label>
+            <input id="playerName" class="name-input" maxlength="18"
+                   autocomplete="nickname" placeholder="Digite seu nome">
+            <button class="primary-button" id="startButton" type="button">
+              Começar aventura
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="side-column">
+        <section class="panel side-panel">
+          <h2>📊 Sua aventura</h2>
+          <div class="stats">
+            <div class="stat">
+              <span class="stat-label">Pontos</span>
+              <span class="stat-value" id="score">0</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Vidas</span>
+              <span class="stat-value" id="lives">❤️ ❤️ ❤️</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Acertos</span>
+              <span class="stat-value" id="correctCount">0</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Erros</span>
+              <span class="stat-value" id="mistakes">0</span>
+            </div>
+          </div>
+          <div class="progress-track" aria-label="Progresso das perguntas">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <p class="small-note" id="progressText">Responda às perguntas para liberar a saída.</p>
+        </section>
+
+        <section class="panel side-panel">
+          <h2>🏆 Ranking online</h2>
+          <ol class="ranking-list" id="rankingList"></ol>
+          <div class="ranking-footer">
+            <span class="small-note" id="rankingStatus">Conectando ao Firebase...</span>
+          </div>
+        </section>
+
+        <section class="panel side-panel how-panel">
+          <h2>Como jogar</h2>
+          <ol class="how-to">
+            <li>Encontre as pedras com perguntas pelo labirinto.</li>
+            <li>Cada resposta errada custa uma vida.</li>
+            <li>Ao perder todas as vidas, a partida termina.</li>
+            <li>Responda às perguntas e alcance a saída correta para avançar.</li>
+            <li>O ranking registra sua pontuação, fase, tempo e data.</li>
+          </ol>
+        </section>
+      </aside>
+    </main>
+
+    <footer>Desenvolvido por Grupo MAAMUTE. © Copyright 2026, All Rights Reserved.</footer>
+  </div>
+
+  <div class="quiz-modal" id="quizModal" hidden>
+    <section class="quiz-card" role="dialog" aria-modal="true" aria-labelledby="quizQuestion">
+      <div class="quiz-kicker" id="quizKicker">Pista do Pré-Cambriano</div>
+      <h2 id="quizQuestion"></h2>
+      <div class="answers" id="answerList"></div>
+      <p class="feedback" id="quizFeedback" aria-live="polite"></p>
+      <div class="quiz-actions">
+        <button class="primary-button" id="continueButton" type="button" hidden>
+          Continuar
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    "use strict";
+
+    const COLS = 17;
+    const ROWS = 13;
+    const QUESTIONS_PER_PHASE = 3;
+    const DECOY_EXITS_PER_PHASE = 3;
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA6TEuXy8aIzhtQ6yXcNhA2VC46fcDX6zg",
+      authDomain: "mamutinho-no-tempo.firebaseapp.com",
+      databaseURL: "https://mamutinho-no-tempo-default-rtdb.firebaseio.com",
+      projectId: "mamutinho-no-tempo",
+      storageBucket: "mamutinho-no-tempo.firebasestorage.app",
+      messagingSenderId: "35856829725",
+      appId: "1:35856829725:web:d3ab33305a6645fe2be5f4",
+      measurementId: "G-BJ5LPLZ636"
+    };
+
+    const facts = [
+      { topic: "a definição do Pré-Cambriano", answer: "É o grande intervalo da história da Terra anterior ao Cambriano.", explanation: "O Pré-Cambriano corresponde ao intervalo anterior ao Período Cambriano." },
+      { topic: "as divisões do Pré-Cambriano", answer: "Hadeano, Arqueano e Proterozoico.", explanation: "Essas são as três grandes divisões do Pré-Cambriano." },
+      { topic: "a duração do Pré-Cambriano", answer: "Ele ocupa a maior parte da história geológica da Terra.", explanation: "O Pré-Cambriano representa mais de 80% do tempo geológico da Terra." },
+      { topic: "o início do Hadeano", answer: "O Hadeano começou com a formação da Terra, há cerca de 4,6 bilhões de anos.", explanation: "O Hadeano começa junto com a formação do planeta." },
+      { topic: "o Arqueano", answer: "Foi um intervalo antigo em que já existiam formas de vida microscópicas.", explanation: "Há evidências de vida microbiana desde o Arqueano." },
+      { topic: "o Proterozoico", answer: "Foi a divisão mais recente e longa do Pré-Cambriano.", explanation: "O Proterozoico antecede o Cambriano e inclui grandes mudanças ambientais e biológicas." },
+      { topic: "as primeiras formas de vida conhecidas", answer: "Eram organismos microscópicos, como bactérias e outros micróbios.", explanation: "As evidências mais antigas conhecidas apontam para vida microscópica." },
+      { topic: "o ambiente das primeiras formas de vida", answer: "As evidências mais antigas de vida estão associadas a ambientes aquáticos.", explanation: "A vida antiga conhecida está ligada principalmente a ambientes aquáticos." },
+      { topic: "as cianobactérias", answer: "São microrganismos que realizam fotossíntese.", explanation: "Cianobactérias são microrganismos fotossintetizantes." },
+      { topic: "os estromatólitos", answer: "São estruturas em camadas formadas por comunidades microbianas.", explanation: "Estromatólitos são estruturas construídas por comunidades de microrganismos." },
+      { topic: "a fotossíntese microbiana", answer: "Contribuiu para a liberação de oxigênio no ambiente.", explanation: "A fotossíntese de microrganismos contribuiu para a oxigenação do planeta." },
+      { topic: "o Grande Evento de Oxigenação", answer: "Foi o aumento significativo de oxigênio na atmosfera, sobretudo no Proterozoico.", explanation: "Esse evento transformou a composição da atmosfera terrestre." },
+      { topic: "o oxigênio no início da história da Terra", answer: "Era muito menos abundante na atmosfera do que é hoje.", explanation: "A atmosfera primitiva tinha muito menos oxigênio livre." },
+      { topic: "as células eucarióticas", answer: "São células com núcleo e surgiram antes do fim do Pré-Cambriano.", explanation: "As células eucarióticas aparecem no registro do Proterozoico." },
+      { topic: "a vida multicelular", answer: "Formas multicelulares surgiram antes do início do Cambriano.", explanation: "A vida multicelular já existia no final do Pré-Cambriano." },
+      { topic: "o Período Ediacarano", answer: "É o último período do Proterozoico.", explanation: "O Ediacarano antecede diretamente o Cambriano." },
+      { topic: "a biota ediacarana", answer: "Inclui organismos antigos, muitos dos quais tinham corpos moles.", explanation: "Fósseis ediacaranos preservam organismos anteriores à diversificação cambriana." },
+      { topic: "as glaciações do tipo Terra bola de neve", answer: "Foram episódios em que grandes áreas do planeta ficaram cobertas por gelo.", explanation: "Há evidências de glaciações muito extensas no Proterozoico." },
+      { topic: "a crosta terrestre primitiva", answer: "Formou-se e se transformou ao longo de bilhões de anos.", explanation: "A crosta terrestre passou por mudanças contínuas desde a formação do planeta." },
+      { topic: "a formação da Lua", answer: "Uma hipótese científica propõe um grande impacto no início da história da Terra.", explanation: "A hipótese do grande impacto é uma explicação científica importante para a origem da Lua." },
+      { topic: "a formação dos oceanos", answer: "O resfriamento da Terra permitiu que parte do vapor d’água se condensasse.", explanation: "Com o resfriamento do planeta, a água pôde se acumular em forma líquida." },
+      { topic: "os continentes antigos", answer: "Cresceram e mudaram ao longo de longos períodos geológicos.", explanation: "Os continentes não surgiram prontos: sua formação ocorreu gradualmente." },
+      { topic: "o registro fóssil do Pré-Cambriano", answer: "É mais limitado e difícil de interpretar do que o de muitos períodos posteriores.", explanation: "Rochas muito antigas foram alteradas, destruídas ou recicladas ao longo do tempo." },
+      { topic: "a diversificação cambriana", answer: "Aconteceu depois do Pré-Cambriano, no início do Cambriano.", explanation: "A diversificação cambriana marca o começo do Período Cambriano." },
+      { topic: "a vida em terra firme durante grande parte do Pré-Cambriano", answer: "A vida conhecida era principalmente aquática ou microscópica.", explanation: "Durante grande parte desse intervalo, a vida era sobretudo microscópica e aquática." }
+    ];
+
+    const questionStyles = [
+      "Qual alternativa descreve corretamente",
+      "Durante o Pré-Cambriano, o que se sabe sobre",
+      "Escolha a afirmação correta a respeito de",
+      "Que ideia resume melhor",
+      "Sobre este tema, qual opção está correta:",
+      "Qual informação científica está correta sobre",
+      "Que alternativa ajuda a compreender",
+      "Em uma revisão do Pré-Cambriano, como podemos caracterizar"
+    ];
+
+    function shuffle(array) {
+      const copy = [...array];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    const questionBank = [];
+    facts.forEach((fact, factIndex) => {
+      questionStyles.forEach((style, styleIndex) => {
+        const distractors = [
+          facts[(factIndex + 5) % facts.length].answer,
+          facts[(factIndex + 11) % facts.length].answer,
+          facts[(factIndex + 17) % facts.length].answer
+        ];
+
+        const answers = shuffle([fact.answer, ...distractors]);
+
+        questionBank.push({
+          question: `${style} ${fact.topic}?`,
+          answers,
+          correct: answers.indexOf(fact.answer),
+          explanation: fact.explanation,
+          id: `${factIndex}-${styleIndex}`
+        });
+      });
+    });
+
+    const mazeElement = document.getElementById("maze");
+    const gameOverlay = document.getElementById("gameOverlay");
+    const overlayCard = document.getElementById("overlayCard");
+    const quizModal = document.getElementById("quizModal");
+    const answerList = document.getElementById("answerList");
+    const soundButton = document.getElementById("soundButton");
+
+    let grid = [];
+    let player = { x: 1, y: 1 };
+    let exit = { x: COLS - 2, y: ROWS - 2 };
+    let checkpoints = new Map();
+    let decoyExits = new Set();
+    let answered = new Set();
+    let active = false;
+    let finished = false;
+    let playerName = "Explorador";
+    let phase = 1;
+    let reachedPhase = 1;
+    let lives = 3;
+    let score = 0;
+    let steps = 0;
+    let mistakes = 0;
+    let startedAt = 0;
+    let timerInterval = null;
+    let soundEnabled = false;
+    let audioContext = null;
+    let ambientNodes = [];
+    let currentQuestion = null;
+    let currentQuestionId = null;
+    let usedQuestions = new Set();
+
+    // Variáveis do ranking Firebase
+    let database = null;
+    let firebaseReady = false;
+    let rankingLoaded = false;
+    let rankingCache = [];
+
+    function keyOf(x, y) {
+      return `${x},${y}`;
+    }
+
+    function nextQuestion() {
+      let available = questionBank.filter(question => !usedQuestions.has(question.id));
+
+      if (!available.length) {
+        usedQuestions.clear();
+        available = [...questionBank];
+      }
+
+      const question = available[Math.floor(Math.random() * available.length)];
+      usedQuestions.add(question.id);
+      return question;
+    }
+
+    function findPath(start, target) {
+      const queue = [start];
+      const previous = new Map([[keyOf(start.x, start.y), null]]);
+
+      for (let i = 0; i < queue.length; i++) {
+        const current = queue[i];
+
+        if (current.x === target.x && current.y === target.y) break;
+
+        for (const direction of [
+          { x: 0, y: -1 }, { x: 0, y: 1 },
+          { x: -1, y: 0 }, { x: 1, y: 0 }
+        ]) {
+          const nx = current.x + direction.x;
+          const ny = current.y + direction.y;
+          const nextKey = keyOf(nx, ny);
+
+          if (
+            nx >= 0 && nx < COLS &&
+            ny >= 0 && ny < ROWS &&
+            grid[ny][nx] === 0 &&
+            !previous.has(nextKey)
+          ) {
+            previous.set(nextKey, keyOf(current.x, current.y));
+            queue.push({ x: nx, y: ny });
+          }
+        }
+      }
+
+      const path = [];
+      let cursor = keyOf(target.x, target.y);
+
+      while (cursor !== null && cursor !== undefined) {
+        const [x, y] = cursor.split(",").map(Number);
+        path.push({ x, y });
+        cursor = previous.get(cursor);
+      }
+
+      return path.reverse();
+    }
+
+    function generateMaze() {
+      grid = Array.from({ length: ROWS }, () => Array(COLS).fill(1));
+
+      const start = { x: 1, y: 1 };
+      grid[start.y][start.x] = 0;
+
+      const stack = [start];
+      const directions = [
+        { x: 0, y: -2 }, { x: 0, y: 2 },
+        { x: -2, y: 0 }, { x: 2, y: 0 }
+      ];
+
+      while (stack.length) {
+        const current = stack[stack.length - 1];
+        const options = shuffle(directions).filter(direction => {
+          const nx = current.x + direction.x;
+          const ny = current.y + direction.y;
+          return nx > 0 && nx < COLS - 1 &&
+                 ny > 0 && ny < ROWS - 1 &&
+                 grid[ny][nx] === 1;
+        });
+
+        if (!options.length) {
+          stack.pop();
+          continue;
+        }
+
+        const direction = options[0];
+        const nx = current.x + direction.x;
+        const ny = current.y + direction.y;
+
+        grid[current.y + direction.y / 2][current.x + direction.x / 2] = 0;
+        grid[ny][nx] = 0;
+        stack.push({ x: nx, y: ny });
+      }
+
+      player = { x: 1, y: 1 };
+      exit = { x: COLS - 2, y: ROWS - 2 };
+      checkpoints = new Map();
+      decoyExits = new Set();
+      answered = new Set();
+
+      const path = findPath(player, exit);
+
+      for (let i = 0; i < QUESTIONS_PER_PHASE; i++) {
+        const pathIndex = Math.floor(((i + 1) / (QUESTIONS_PER_PHASE + 1)) * (path.length - 1));
+        const cell = path[pathIndex];
+
+        if (cell && !(cell.x === exit.x && cell.y === exit.y)) {
+          checkpoints.set(keyOf(cell.x, cell.y), nextQuestion());
+        }
+      }
+
+      // Cria portas falsas em outras áreas livres do labirinto.
+      // Elas não avançam de fase; somente a saída verdadeira funciona.
+      const candidates = [];
+
+      for (let y = 1; y < ROWS - 1; y++) {
+        for (let x = 1; x < COLS - 1; x++) {
+          const cellKey = keyOf(x, y);
+
+          if (
+            grid[y][x] === 0 &&
+            !(x === player.x && y === player.y) &&
+            !(x === exit.x && y === exit.y) &&
+            !checkpoints.has(cellKey)
+          ) {
+            candidates.push(cellKey);
+          }
+        }
+      }
+
+      shuffle(candidates)
+        .slice(0, DECOY_EXITS_PER_PHASE)
+        .forEach(cellKey => decoyExits.add(cellKey));
+
+      renderMaze();
+      updateStats();
+    }
+
+    function mammothImage(className) {
+      return `<img class="${className}" src="maamute.png" alt="Mamutinho verde"
+        onerror="this.onerror=null;this.replaceWith(document.createTextNode('🦣'))">`;
+    }
+
+    function renderMaze() {
+      mazeElement.innerHTML = "";
+
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          const cell = document.createElement("div");
+          cell.className = grid[y][x] === 1 ? "cell wall" : "cell";
+
+          const cellKey = keyOf(x, y);
+
+          if (
+            (x === exit.x && y === exit.y) ||
+            decoyExits.has(cellKey)
+          ) {
+            cell.classList.add("exit");
+          }
+
+          if (checkpoints.has(cellKey) && !answered.has(cellKey)) {
+            cell.classList.add("artifact");
+          }
+
+          if (x === player.x && y === player.y) {
+            cell.innerHTML = mammothImage("mammoth");
+          }
+
+          mazeElement.appendChild(cell);
+        }
+      }
+    }
+
+    function updateStats() {
+      const phaseCorrect = answered.size;
+
+      document.getElementById("phase").textContent = phase;
+      document.getElementById("score").textContent = score.toLocaleString("pt-BR");
+      document.getElementById("lives").textContent =
+        "❤️ ".repeat(lives).trim() || "0";
+      document.getElementById("correctCount").textContent =
+        (phase - 1) * QUESTIONS_PER_PHASE + phaseCorrect;
+      document.getElementById("mistakes").textContent = mistakes;
+      document.getElementById("questionStatus").textContent =
+        `${phaseCorrect}/${QUESTIONS_PER_PHASE} perguntas`;
+      document.getElementById("progressFill").style.width =
+        `${(phaseCorrect / QUESTIONS_PER_PHASE) * 100}%`;
+      document.getElementById("progressText").textContent =
+        phaseCorrect === QUESTIONS_PER_PHASE
+          ? "Todas as pistas encontradas! Agora procure a saída correta."
+          : "Responda às perguntas para liberar a saída.";
+    }
+
+    function formatTime(totalSeconds) {
+      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      return `${minutes}:${seconds}`;
+    }
+
+    function updateTimer() {
+      if (!active) return;
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      document.getElementById("timer").textContent = formatTime(elapsed);
+    }
+
+    function startGame() {
+      const input = document.getElementById("playerName");
+      playerName = (input.value.trim() || "Explorador").slice(0, 18);
+
+      active = true;
+      finished = false;
+      phase = 1;
+      reachedPhase = 1;
+      lives = 3;
+      score = 0;
+      steps = 0;
+      mistakes = 0;
+      usedQuestions = new Set();
+      startedAt = Date.now();
+
+      document.getElementById("timer").textContent = "00:00";
+      gameOverlay.hidden = true;
+      generateMaze();
+
+      clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimer, 500);
+      playTone(520, .09);
+    }
+
+    function move(direction) {
+      if (!active || finished || !quizModal.hidden) return;
+
+      const deltas = {
+        up: { x: 0, y: -1 },
+        down: { x: 0, y: 1 },
+        left: { x: -1, y: 0 },
+        right: { x: 1, y: 0 }
+      };
+
+      const delta = deltas[direction];
+      if (!delta) return;
+
+      const nx = player.x + delta.x;
+      const ny = player.y + delta.y;
+
+      if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS || grid[ny][nx] === 1) {
+        playTone(150, .045);
+        return;
+      }
+
+      const nextKey = keyOf(nx, ny);
+      const isCorrectExit = nx === exit.x && ny === exit.y;
+      const isDecoyExit = decoyExits.has(nextKey);
+
+      if (isCorrectExit && answered.size < QUESTIONS_PER_PHASE) {
+        document.getElementById("progressText").textContent =
+          "A saída está fechada. Encontre as perguntas que faltam!";
+        playTone(180, .12);
+        return;
+      }
+
+      player = { x: nx, y: ny };
+      steps++;
+      renderMaze();
+      updateStats();
+      playTone(330, .045);
+
+      if (checkpoints.has(nextKey) && !answered.has(nextKey)) {
+        showQuestion(nextKey);
+        return;
+      }
+
+      if (isCorrectExit) {
+        advancePhase();
+        return;
+      }
+
+      if (isDecoyExit) {
+        document.getElementById("progressText").textContent =
+          "Esta porta não é a saída correta. Continue explorando!";
+      }
+    }
+
+    function showQuestion(cellKey) {
+      currentQuestionId = cellKey;
+      currentQuestion = checkpoints.get(cellKey);
+
+      document.getElementById("quizKicker").textContent =
+        `Fase ${phase} · Pista ${answered.size + 1} de ${QUESTIONS_PER_PHASE}`;
+      document.getElementById("quizQuestion").textContent = currentQuestion.question;
+
+      const feedback = document.getElementById("quizFeedback");
+      feedback.textContent = "";
+      feedback.className = "feedback";
+      document.getElementById("continueButton").hidden = true;
+      answerList.innerHTML = "";
+
+      currentQuestion.answers.forEach((answer, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "answer-button";
+        button.textContent = answer;
+        button.addEventListener("click", () => answerQuestion(index, button));
+        answerList.appendChild(button);
+      });
+
+      quizModal.hidden = false;
+      answerList.querySelector("button")?.focus();
+    }
+
+    function answerQuestion(selectedIndex, selectedButton) {
+      if (!currentQuestion) return;
+
+      const buttons = [...answerList.querySelectorAll("button")];
+      const feedback = document.getElementById("quizFeedback");
+      buttons.forEach(button => button.disabled = true);
+
+      if (selectedIndex === currentQuestion.correct) {
+        answered.add(currentQuestionId);
+        score += 500;
+        selectedButton.classList.add("correct");
+        feedback.textContent = currentQuestion.explanation;
+        feedback.className = "feedback good";
+        playTone(740, .13);
+      } else {
+        mistakes++;
+        lives--;
+        selectedButton.classList.add("wrong");
+        buttons[currentQuestion.correct]?.classList.add("correct");
+        feedback.textContent = lives > 0
+          ? `Resposta incorreta. Você perdeu uma vida. ${currentQuestion.explanation}`
+          : `Você perdeu a última vida. ${currentQuestion.explanation}`;
+        feedback.className = "feedback bad";
+        playTone(190, .12);
+      }
+
+      updateStats();
+      document.getElementById("continueButton").hidden = false;
+      document.getElementById("continueButton").textContent =
+        lives <= 0 ? "Ver resultado" : "Continuar";
+    }
+
+    function closeQuestion() {
+      quizModal.hidden = true;
+      currentQuestion = null;
+
+      if (lives <= 0) {
+        endGame(false);
+        return;
+      }
+
+      renderMaze();
+      updateStats();
+    }
+
+    function advancePhase() {
+      score += Math.max(0, 1000 - steps * 2);
+      reachedPhase = Math.max(reachedPhase, phase);
+      phase++;
+
+      if (phase > reachedPhase) reachedPhase = phase;
+
+      document.getElementById("progressText").textContent =
+        `Fase ${phase - 1} concluída! Preparando o próximo labirinto...`;
+
+      playTone(880, .2);
+      generateMaze();
+      updateStats();
+    }
+
+    function endGame(won) {
+      if (finished) return;
+
+      active = false;
+      finished = true;
+      clearInterval(timerInterval);
+
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      const entry = {
+        name: playerName,
+        score,
+        phase: reachedPhase,
+        time: formatTime(elapsed),
+        timeSeconds: elapsed,
+        date: new Date().toLocaleDateString("pt-BR")
+      };
+
+      saveScore(entry);
+
+      gameOverlay.hidden = false;
+      overlayCard.innerHTML = `
+        ${mammothImage("overlay-mammoth")}
+        <h2>${won ? "Parabéns, explorador!" : "Fim de jogo"}</h2>
+        <p>
+          ${won ? "Você concluiu a aventura!" : "Suas vidas acabaram."}<br>
+          Fase alcançada: <strong>${reachedPhase}</strong><br>
+          Pontuação: <strong>${score.toLocaleString("pt-BR")}</strong><br>
+          Tempo: <strong>${formatTime(elapsed)}</strong>
+        </p>
+        <button class="primary-button" id="playAgainButton" type="button">
+          Jogar novamente
+        </button>
+      `;
+
+      document.getElementById("playAgainButton").addEventListener("click", showStartScreen);
+    }
+
+    function showStartScreen() {
+      active = false;
+      finished = false;
+      clearInterval(timerInterval);
+      quizModal.hidden = true;
+      gameOverlay.hidden = false;
+
+      overlayCard.innerHTML = `
+        ${mammothImage("overlay-mammoth")}
+        <h2>Pronto para explorar?</h2>
+        <p>
+          Explore labirintos diferentes, responda às perguntas e avance
+          pelas fases do Pré-Cambriano.
+        </p>
+        <label for="playerName" class="small-note">Seu nome para o ranking</label>
+        <input id="playerName" class="name-input" maxlength="18"
+               autocomplete="nickname" placeholder="Digite seu nome">
+        <button class="primary-button" id="startButton" type="button">
+          Começar aventura
+        </button>
+      `;
+
+      document.getElementById("startButton").addEventListener("click", startGame);
+    }
+
+    async function saveScore(entry) {
+      if (!firebaseReady || !database) {
+        document.getElementById("rankingStatus").textContent =
+          "Firebase indisponível; pontuação não salva.";
+        return;
+      }
+
+      try {
+        const newEntryRef = database.ref("ranking").push();
+
+        await newEntryRef.set({
+          name: entry.name,
+          phase: Number(entry.phase),
+          time: entry.time,
+          timeSeconds: Number(entry.timeSeconds),
+          score: Number(entry.score),
+          date: entry.date
+        });
+
+        document.getElementById("rankingStatus").textContent =
+          "Pontuação salva no ranking online.";
+      } catch (error) {
+        console.error("Não foi possível salvar no Firebase:", error);
+        document.getElementById("rankingStatus").textContent =
+          "Falha ao salvar a pontuação no Firebase.";
+      }
+    }
+
+    function getTimeSeconds(entry) {
+      if (Number.isFinite(Number(entry.timeSeconds))) {
+        return Number(entry.timeSeconds);
+      }
+
+      if (typeof entry.time === "number") {
+        return entry.time;
+      }
+
+      if (typeof entry.time === "string" && /^\d+:\d{2}$/.test(entry.time)) {
+        const [minutes, seconds] = entry.time.split(":").map(Number);
+        return minutes * 60 + seconds;
+      }
+
+      return Number.MAX_SAFE_INTEGER;
+    }
+
+    function renderRanking() {
+      const list = document.getElementById("rankingList");
+      list.innerHTML = "";
+
+      if (!rankingLoaded) {
+        const loading = document.createElement("li");
+        loading.className = "empty-ranking";
+        loading.textContent = "Carregando ranking online...";
+        list.appendChild(loading);
+        return;
+      }
+
+      if (!rankingCache.length) {
+        const empty = document.createElement("li");
+        empty.className = "empty-ranking";
+        empty.textContent = "Ainda não há pontuações. Seja o primeiro!";
+        list.appendChild(empty);
+        return;
+      }
+
+      rankingCache.slice(0, 5).forEach((entry, index) => {
+        const item = document.createElement("li");
+        item.className = "ranking-item";
+
+        const position = document.createElement("span");
+        position.className = "rank-number";
+        position.textContent = `${index + 1}º`;
+
+        const details = document.createElement("span");
+        details.className = "rank-details";
+
+        const name = document.createElement("span");
+        name.className = "rank-name";
+        name.textContent = `${entry.name || "Explorador"} · fase ${entry.phase || 1}`;
+
+        const meta = document.createElement("span");
+        meta.className = "rank-meta";
+        const timeText = typeof entry.time === "string"
+          ? entry.time
+          : formatTime(getTimeSeconds(entry));
+        meta.textContent = `${timeText} · ${entry.date || "Data não informada"}`;
+
+        details.append(name, meta);
+
+        const rankScore = document.createElement("span");
+        rankScore.className = "rank-score";
+        rankScore.textContent = Number(entry.score || 0).toLocaleString("pt-BR");
+
+        item.append(position, details, rankScore);
+        list.appendChild(item);
+      });
+    }
+
+    function connectFirebase() {
+      const status = document.getElementById("rankingStatus");
+
+      try {
+        if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+        }
+
+        database = firebase.database();
+
+        firebase.auth().signInAnonymously()
+          .then(() => {
+            firebaseReady = true;
+
+            database.ref("ranking")
+              .on("value", snapshot => {
+                rankingCache = [];
+
+                snapshot.forEach(childSnapshot => {
+                  rankingCache.push({
+                    id: childSnapshot.key,
+                    ...childSnapshot.val()
+                  });
+                });
+
+                rankingCache.sort((a, b) => {
+                  const scoreDifference = Number(b.score || 0) - Number(a.score || 0);
+                  if (scoreDifference !== 0) return scoreDifference;
+                  return getTimeSeconds(a) - getTimeSeconds(b);
+                });
+
+                rankingLoaded = true;
+                status.textContent = "Ranking online conectado.";
+                renderRanking();
+              }, error => {
+                console.error("Erro ao ler o ranking:", error);
+                rankingLoaded = false;
+                status.textContent = "Não foi possível carregar o ranking online.";
+                renderRanking();
+              });
+          })
+          .catch(error => {
+            console.error("Erro na autenticação anônima do Firebase:", error);
+            rankingLoaded = false;
+            status.textContent = "Firebase indisponível; ranking online não carregado.";
+            renderRanking();
+          });
+      } catch (error) {
+        console.error("Erro ao iniciar o Firebase:", error);
+        rankingLoaded = false;
+        status.textContent = "Firebase indisponível; ranking online não carregado.";
+        renderRanking();
+      }
+    }
+
+    function playTone(frequency, duration) {
+      if (!soundEnabled) return;
+
+      try {
+        audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(.045, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(.001, audioContext.currentTime + duration);
+
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + duration);
+      } catch {
+        // O jogo funciona normalmente sem áudio.
+      }
+    }
+
+    async function toggleSound() {
+      soundEnabled = !soundEnabled;
+      soundButton.setAttribute("aria-pressed", String(soundEnabled));
+      soundButton.textContent = soundEnabled ? "🔊 Som ligado" : "🔇 Som desligado";
+
+      if (!soundEnabled) {
+        ambientNodes.forEach(node => {
+          try { node.stop(); } catch { /* já parado */ }
+        });
+        ambientNodes = [];
+        return;
+      }
+
+      try {
+        audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+        await audioContext.resume();
+
+        const master = audioContext.createGain();
+        master.gain.value = .025;
+        master.connect(audioContext.destination);
+
+        [55, 82.4, 110].forEach((frequency, index) => {
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+
+          oscillator.type = index === 1 ? "triangle" : "sine";
+          oscillator.frequency.value = frequency;
+          gain.gain.value = index === 1 ? .22 : .35;
+          oscillator.connect(gain);
+          gain.connect(master);
+          oscillator.start();
+          ambientNodes.push(oscillator);
+        });
+
+        ambientNodes.push(master);
+        playTone(520, .08);
+      } catch {
+        soundEnabled = false;
+        soundButton.textContent = "🔇 Som desligado";
+      }
+    }
+
+    document.addEventListener("keydown", event => {
+      if (event.target.matches("input, button")) return;
+
+      const keyMap = {
+        ArrowUp: "up", w: "up", W: "up",
+        ArrowDown: "down", s: "down", S: "down",
+        ArrowLeft: "left", a: "left", A: "left",
+        ArrowRight: "right", d: "right", D: "right"
+      };
+
+      const direction = keyMap[event.key];
+      if (direction) {
+        event.preventDefault();
+        move(direction);
+      }
+    });
+
+    document.querySelectorAll("[data-move]").forEach(button => {
+      button.addEventListener("click", () => move(button.dataset.move));
+    });
+
+    document.getElementById("startButton").addEventListener("click", startGame);
+    document.getElementById("continueButton").addEventListener("click", closeQuestion);
+    soundButton.addEventListener("click", toggleSound);
+
+    document.getElementById("newGameButton").addEventListener("click", () => {
+      if (active && !confirm("Começar um novo jogo? O progresso desta partida será perdido.")) {
+        return;
+      }
+      showStartScreen();
+    });
+
+    generateMaze();
+    updateStats();
+    renderRanking();
+    connectFirebase();
+  </script>
+</body>
+</html>
